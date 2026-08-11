@@ -1,0 +1,1 @@
+- [Lottery service operations](lottery-service-operations.md) — Telegram reservations, manual payment verification, and one-time paid-entry draw are the core product flow.

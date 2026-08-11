@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Lotto Service"
+description = "A Telegram-connected lottery service for selling 300 numbered entries at 200 each, collecting Bank or Telebirr payment proof for admin confirmation, and randomly drawing a winner from paid entries. Includes a browser admin console for managing entries, payments, and the draw."
+version = "1.0.0"
+id = "artifacts/lotto-service"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19299
+
+[services.development]
+run = "pnpm --filter @workspace/lotto-service run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/lotto-service", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/lotto-service/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19299"
+BASE_PATH = "/"

@@ -1,45 +1,45 @@
-# [Project name]
+# Lotto Service
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Telegram-connected lottery service for selling 300 numbered entries at 200 ETB each, collecting Bank or Telebirr payment proof, confirming payments manually, and drawing a winner from paid entries.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the Telegram/API server
+- `pnpm --filter @workspace/lotto-service run dev` — run the admin console
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
-
-## Stack
-
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
-
-## Where things live
-
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
-
-## Architecture decisions
-
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- `pnpm --filter @workspace/db run push` — apply development schema changes
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate typed API clients after OpenAPI changes
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Customers use the Telegram bot to view available numbers, reserve a number, submit Bank or Telebirr payment references, and check status.
+- The admin console shows the live number board, pending payment proofs, entry register, collections, and activity trail.
+- Admin approval changes a number to paid; rejection releases it.
+- The winner draw is protected by an admin key and can select only one paid entry.
 
-## User preferences
+## Stack
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- pnpm workspace, TypeScript, Express 5, React + Vite
+- PostgreSQL + Drizzle ORM
+- OpenAPI + generated Zod schemas and React Query hooks
+- Telegram Bot API polling
+
+## Environment
+
+- `DATABASE_URL` — provisioned PostgreSQL connection
+- `TELEGRAM_BOT_TOKEN` — Telegram bot token stored as a Replit Secret
+- `LOTTO_ADMIN_KEY` — private key for protected admin operations stored as a Replit Secret
+
+## Where things live
+
+- `lib/api-spec/openapi.yaml` — API contract
+- `lib/db/src/schema/lottery.ts` — lottery database schema
+- `artifacts/api-server/src/lib/lottery.ts` — reservation, payment, activity, and draw logic
+- `artifacts/api-server/src/lib/telegram.ts` — Telegram commands and polling
+- `artifacts/lotto-service/src/App.tsx` — admin console
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- The admin console requires the configured admin key on first open and stores it only in browser local storage.
+- A paid number cannot be released by rejection.
+- The draw is one-time and disabled while payment proofs remain pending.

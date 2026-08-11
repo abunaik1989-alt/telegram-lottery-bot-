@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: lottery
+    description: Customer lottery operations
+  - name: admin
+    description: Lottery administration
+  - name: telegram
+    description: Telegram webhook operations
 paths:
   /healthz:
     get:
@@ -24,7 +30,190 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /lottery/summary:
+    get:
+      operationId: getLotterySummary
+      tags: [lottery]
+      summary: Get lottery summary
+      responses:
+        "200":
+          description: Current lottery totals and draw state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LotterySummary"
+  /lottery/numbers:
+    get:
+      operationId: listLotteryNumbers
+      tags: [lottery]
+      summary: List lottery numbers
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [available, reserved, paid, all]
+            default: all
+      responses:
+        "200":
+          description: Number board
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LotteryNumber"
+  /lottery/reservations:
+    post:
+      operationId: createLotteryReservation
+      tags: [lottery]
+      summary: Reserve a lottery number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationInput"
+      responses:
+        "201":
+          description: Reservation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LotteryEntry"
+        "409":
+          description: Number is no longer available
+  /lottery/reservations/{id}/payment-proof:
+    post:
+      operationId: submitPaymentProof
+      tags: [lottery]
+      summary: Submit payment proof for a reservation
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentProofInput"
+      responses:
+        "200":
+          description: Payment proof received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LotteryEntry"
+        "404":
+          description: Entry not found
+  /admin/lottery/entries:
+    get:
+      operationId: listAdminLotteryEntries
+      tags: [admin]
+      summary: List lottery entries for review
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [reserved, proof_submitted, paid, rejected, all]
+            default: all
+      responses:
+        "200":
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LotteryEntry"
+  /admin/lottery/entries/{id}/approve:
+    post:
+      operationId: approveLotteryEntry
+      tags: [admin]
+      summary: Approve a payment proof
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "200":
+          description: Paid entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LotteryEntry"
+        "409":
+          description: Entry cannot be approved
+  /admin/lottery/entries/{id}/reject:
+    post:
+      operationId: rejectLotteryEntry
+      tags: [admin]
+      summary: Reject a payment proof and release the number
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectEntryInput"
+      responses:
+        "200":
+          description: Rejected entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LotteryEntry"
+  /admin/lottery/draw:
+    post:
+      operationId: drawLotteryWinner
+      tags: [admin]
+      summary: Randomly draw a winner from paid entries
+      responses:
+        "200":
+          description: Draw result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DrawResult"
+        "409":
+          description: No paid entries or draw already completed
+  /admin/lottery/activity:
+    get:
+      operationId: listLotteryActivity
+      tags: [admin]
+      summary: List recent lottery activity
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LotteryActivity"
+  /telegram/webhook:
+    post:
+      operationId: handleTelegramWebhook
+      tags: [telegram]
+      summary: Receive Telegram updates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramUpdate"
+      responses:
+        "200":
+          description: Update accepted
 components:
+  parameters:
+    EntryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: number
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +222,141 @@ components:
           type: string
       required:
         - status
+    LotteryNumber:
+      type: object
+      properties:
+        number:
+          type: number
+        status:
+          type: string
+          enum: [available, reserved, paid]
+        customerName:
+          type: ["string", "null"]
+        reservedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [number, status]
+    LotterySummary:
+      type: object
+      properties:
+        totalNumbers:
+          type: number
+        availableNumbers:
+          type: number
+        reservedNumbers:
+          type: number
+        paidNumbers:
+          type: number
+        proofPending:
+          type: number
+        totalCollected:
+          type: number
+        pricePerNumber:
+          type: number
+        currency:
+          type: string
+        winnerNumber:
+          type: ["number", "null"]
+        drawCompleted:
+          type: boolean
+      required: [totalNumbers, availableNumbers, reservedNumbers, paidNumbers, proofPending, totalCollected, pricePerNumber, currency, winnerNumber, drawCompleted]
+    LotteryEntry:
+      type: object
+      properties:
+        id:
+          type: number
+        number:
+          type: number
+        customerName:
+          type: string
+        telegramUsername:
+          type: ["string", "null"]
+        telegramChatId:
+          type: string
+        phone:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [reserved, proof_submitted, paid, rejected]
+        paymentMethod:
+          type: ["string", "null"]
+        paymentReference:
+          type: ["string", "null"]
+        paymentProof:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, number, customerName, telegramUsername, telegramChatId, phone, status, paymentMethod, paymentReference, paymentProof, createdAt, updatedAt]
+    ReservationInput:
+      type: object
+      properties:
+        number:
+          type: number
+          minimum: 1
+          maximum: 300
+        customerName:
+          type: string
+          minLength: 1
+        telegramUsername:
+          type: ["string", "null"]
+        telegramChatId:
+          type: string
+          minLength: 1
+        phone:
+          type: ["string", "null"]
+      required: [number, customerName, telegramChatId]
+    PaymentProofInput:
+      type: object
+      properties:
+        paymentMethod:
+          type: string
+          enum: [bank, telebirr]
+        paymentReference:
+          type: string
+          minLength: 1
+        paymentProof:
+          type: string
+          minLength: 1
+      required: [paymentMethod, paymentReference, paymentProof]
+    RejectEntryInput:
+      type: object
+      properties:
+        reason:
+          type: ["string", "null"]
+    DrawResult:
+      type: object
+      properties:
+        winnerNumber:
+          type: number
+        customerName:
+          type: string
+        telegramUsername:
+          type: ["string", "null"]
+        drawnAt:
+          type: string
+          format: date-time
+      required: [winnerNumber, customerName, telegramUsername, drawnAt]
+    LotteryActivity:
+      type: object
+      properties:
+        id:
+          type: number
+        type:
+          type: string
+          enum: [reservation, proof_submitted, approved, rejected, draw]
+        message:
+          type: string
+        entryNumber:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, type, message, entryNumber, createdAt]
+    TelegramUpdate:
+      type: object
+      additionalProperties: true
 
