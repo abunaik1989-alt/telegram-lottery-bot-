@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   db,
   lotteryActivityTable,
@@ -9,6 +9,7 @@ import {
 export const TOTAL_NUMBERS = 300;
 export const PRICE_PER_NUMBER = 200;
 export const CURRENCY = "ETB";
+export const RESERVATION_EXPIRY_MINUTES = 15;
 
 export async function ensureLotterySettings() {
   const [existing] = await db
@@ -33,6 +34,34 @@ export async function ensureLotterySettings() {
     .where(eq(lotterySettingsTable.id, 1));
   if (!retried) throw new Error("Lottery settings could not be initialized");
   return retried;
+}
+
+// AUTO-CLEANUP: Rejects reservations older than 15 minutes without payment proof
+export async function cleanupExpiredReservations() {
+  const cutoffTime = new Date(Date.now() - RESERVATION_EXPIRY_MINUTES * 60 * 1000);
+
+  const expiredEntries = await db
+    .select()
+    .from(lotteryEntriesTable)
+    .where(
+      and(
+        eq(lotteryEntriesTable.status, "reserved"),
+        lt(lotteryEntriesTable.updatedAt, cutoffTime)
+      )
+    );
+
+  for (const entry of expiredEntries) {
+    await db
+      .update(lotteryEntriesTable)
+      .set({ status: "rejected", updatedAt: new Date() })
+      .where(eq(lotteryEntriesTable.id, entry.id));
+
+    await addActivity(
+      "rejected",
+      `⏰ Reservation for number ${entry.number} automatically expired after 15 minutes.`,
+      entry.number
+    );
+  }
 }
 
 export function numberStatus(
@@ -60,6 +89,7 @@ export async function entryForApi(entry: typeof lotteryEntriesTable.$inferSelect
 }
 
 export async function getSummary() {
+  await cleanupExpiredReservations();
   const settings = await ensureLotterySettings();
   const entries = await db.select().from(lotteryEntriesTable);
   const active = entries.filter((entry) => entry.status !== "rejected");
@@ -85,6 +115,7 @@ export async function getSummary() {
 }
 
 export async function listNumbers(status = "all") {
+  await cleanupExpiredReservations();
   const settings = await ensureLotterySettings();
   const entries = await db
     .select()
@@ -113,6 +144,7 @@ export async function reserveNumber(input: {
   telegramChatId: string;
   phone?: string | null;
 }) {
+  await cleanupExpiredReservations();
   const settings = await ensureLotterySettings();
   if (input.number < 1 || input.number > settings.totalNumbers) {
     throw new Error("That number is outside this lottery.");
@@ -173,7 +205,7 @@ export async function submitProof(
       ),
     )
     .returning();
-  if (!updated) throw new Error("Reservation not found or already processed.");
+  if (!updated) throw new Error("Reservation expired or already processed.");
   await addActivity(
     "proof_submitted",
     `Payment proof submitted for number ${updated.number}.`,
@@ -229,23 +261,30 @@ export async function drawWinner() {
     .select()
     .from(lotteryEntriesTable)
     .where(eq(lotteryEntriesTable.status, "paid"));
-  if (paid.length === 0) throw new Error("At least one paid entry is required.");
 
-  // 1. Select the winner from paid numbers
+  if (paid.length === 0) {
+    throw new Error("At least one paid entry is required to draw a winner!");
+  }
+
   const winner = paid[Math.floor(Math.random() * paid.length)];
   const drawnAt = new Date().toISOString();
 
-  // 2. Log winner activity
+  const allParticipants = await db
+    .select({ chatId: lotteryEntriesTable.telegramChatId })
+    .from(lotteryEntriesTable);
+
+  const participantChatIds = Array.from(
+    new Set(allParticipants.map((p) => p.chatId).filter(Boolean))
+  );
+
   await addActivity(
     "draw",
-    `Number ${winner.number} won the lottery (${winner.customerName}). Board auto-reset for next round.`,
+    `🎉 Winner drawn: Number #${winner.number} (${winner.customerName}). All entries cleared for next round.`,
     winner.number,
   );
 
-  // 3. AUTO-RESET: Clear all entries so all 300 numbers become available again
   await db.delete(lotteryEntriesTable);
 
-  // 4. Reset draw status in settings so a new draw can take place later
   await db
     .update(lotterySettingsTable)
     .set({
@@ -260,6 +299,7 @@ export async function drawWinner() {
     customerName: winner.customerName,
     telegramUsername: winner.telegramUsername,
     drawnAt,
+    participantChatIds,
   };
 }
 
@@ -278,13 +318,24 @@ export async function recentActivity() {
   }));
 }
 
-export async function allEntries(status = "all") {
+export async function allEntries(status = "all", query = "") {
+  await cleanupExpiredReservations();
   const rows = await db
     .select()
     .from(lotteryEntriesTable)
     .orderBy(desc(lotteryEntriesTable.updatedAt));
+
+  const searchTerm = query.trim().toLowerCase();
+
   return rows
     .filter((row) => status === "all" || row.status === status)
+    .filter((row) => {
+      if (!searchTerm) return true;
+      const nameMatch = row.customerName?.toLowerCase().includes(searchTerm);
+      const phoneMatch = row.phone?.toLowerCase().includes(searchTerm);
+      const numberMatch = String(row.number).includes(searchTerm);
+      return nameMatch || phoneMatch || numberMatch;
+    })
     .map((row) => ({
       ...row,
       createdAt: row.createdAt.toISOString(),
@@ -293,6 +344,7 @@ export async function allEntries(status = "all") {
 }
 
 export async function findCustomerEntry(chatId: string) {
+  await cleanupExpiredReservations();
   const [entry] = await db
     .select()
     .from(lotteryEntriesTable)
@@ -309,4 +361,14 @@ export async function findCustomerEntry(chatId: string) {
     .orderBy(desc(lotteryEntriesTable.updatedAt))
     .limit(1);
   return entry;
+}
+
+export async function updateCustomerPhone(chatId: string, phone: string) {
+  const entry = await findCustomerEntry(chatId);
+  if (entry) {
+    await db
+      .update(lotteryEntriesTable)
+      .set({ phone, updatedAt: new Date() })
+      .where(eq(lotteryEntriesTable.id, entry.id));
+  }
 }

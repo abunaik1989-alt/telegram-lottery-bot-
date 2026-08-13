@@ -83,3 +83,4 @@ path = "scripts/post-merge.sh"
 timeoutMs = 20000
 
 [nix]
+packages = ["haskellPackages.nix-output-monitor"]
