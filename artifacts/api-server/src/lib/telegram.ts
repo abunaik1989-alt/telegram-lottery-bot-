@@ -54,6 +54,7 @@ type TelegramMessage = {
   message_id?: number;
   chat: TelegramChat;
   text?: string;
+  caption?: string;
   photo?: TelegramPhoto[];
   contact?: TelegramContact;
   from?: TelegramUser;
@@ -63,6 +64,8 @@ type TelegramUpdate = {
   update_id?: number;
   message?: TelegramMessage;
 };
+
+type TelegramPaymentMethod = "bank" | "telebirr";
 
 /* =========================================================
    LANGUAGE
@@ -426,6 +429,47 @@ function getCommandText(
     .trim();
 }
 
+function paymentMethodFromText(
+  value: string | undefined,
+): TelegramPaymentMethod {
+  const normalized = (value ?? "").toLowerCase();
+
+  return /\b(bank|cbe)\b/.test(normalized)
+    ? "bank"
+    : "telebirr";
+}
+
+function parsePaymentReference(
+  text: string,
+): {
+  paymentMethod: TelegramPaymentMethod;
+  paymentReference: string;
+} | null {
+  const args = getCommandArguments(text);
+  const methodToken = args.shift()?.toLowerCase();
+
+  if (
+    !methodToken ||
+    !["bank", "cbe", "telebirr"].includes(methodToken)
+  ) {
+    return null;
+  }
+
+  const paymentReference = args.join(" ").trim();
+
+  if (!paymentReference) {
+    return null;
+  }
+
+  return {
+    paymentMethod:
+      methodToken === "bank" || methodToken === "cbe"
+        ? "bank"
+        : "telebirr",
+    paymentReference,
+  };
+}
+
 /* =========================================================
    ADMIN COMMAND SCOPES
    ========================================================= */
@@ -455,6 +499,11 @@ async function setupAdminCommandScopes() {
               command: "pending",
               description:
                 "View pending payment proofs",
+            },
+            {
+              command: "proof",
+              description:
+                "Submit payment reference",
             },
             {
               command: "approve",
@@ -1772,6 +1821,8 @@ async function handleHelpCommand(
       )}\n\n` +
         `• /numbers - ክፍት ቁጥሮችን ለማየት\n` +
         `• /pick 42 - ቁጥር ለመምረጥ\n` +
+        `• /proof bank 12345 - የክፍያ ማጣቀሻ ቁጥር ለመላክ\n` +
+        `• ወይም የክፍያ ደረሰኝ ስክሪንሾት ይላኩ\n` +
         `• /status - የያዙትን ቁጥሮች ለማየት\n` +
         `• /lang - ቋንቋ ለመቀየር`,
     );
@@ -1785,6 +1836,8 @@ async function handleHelpCommand(
       )}\n\n` +
         `• /numbers - Lakkoofsa jiran ilaaluuf\n` +
         `• /pick 42 - Lakkoofsa filachuuf\n` +
+        `• /proof bank 12345 - Lakkoofsa ragaa kaffaltii erguuf\n` +
+        `• Yookaan screenshot nagahee kaffaltii ergaa\n` +
         `• /status - Lakkoofsota qabdan ilaaluuf\n` +
         `• /lang - Afaan jijjiiruuf`,
     );
@@ -1796,6 +1849,8 @@ async function handleHelpCommand(
       )}\n\n` +
         `• /numbers - View available numbers\n` +
         `• /pick 42 - Choose a number\n` +
+        `• /proof bank 12345 - Submit a payment reference\n` +
+        `• Or send a payment receipt screenshot\n` +
         `• /status - View your numbers\n` +
         `• /lang - Change language`,
     );
@@ -2236,7 +2291,7 @@ async function handlePendingName(
             "Remedan Abdulbari Esmael",
           )}\n\n` +
           `ከከፈሉ በኋላ ${bold(
-            "የክፍያ ደረሰኝ ስክሪንሾት",
+            "የክፍያ ደረሰኝ ስክሪንሾት ወይም ማጣቀሻ ቁጥር",
           )} ቀጥታ ወደዚህ ቻት ይላኩ።`,
       );
     } else if (
@@ -2275,7 +2330,7 @@ async function handlePendingName(
             "Remedan Abdulbari Esmael",
           )}\n\n` +
           `Kaffaltii erga raawwattanii booda ${bold(
-            "screenshot nagahee kaffaltii",
+            "screenshot nagahee kaffaltii ykn lakkoofsa ragaa",
           )} kallattiin chat kanaaf ergaa.`,
       );
     } else {
@@ -2312,8 +2367,13 @@ async function handlePendingName(
             "Remedan Abdulbari Esmael",
           )}\n\n` +
           `After paying, send the ${bold(
-            "payment screenshot",
-          )} directly to this chat.`,
+            "payment screenshot or reference number",
+          )} directly to this chat.\n\n` +
+          `For a reference, send ${code(
+            "/proof bank REFERENCE",
+          )} or ${code(
+            "/proof telebirr REFERENCE",
+          )}.`,
       );
     }
 
@@ -2579,6 +2639,108 @@ async function requirePhone(
 }
 
 /* =========================================================
+   PAYMENT REFERENCE
+   ========================================================= */
+
+async function handlePaymentReference(
+  chatId: string,
+  text: string,
+  lang: Language,
+): Promise<void> {
+  const parsed = parsePaymentReference(text);
+
+  if (!parsed) {
+    await sendMessage(
+      chatId,
+      `⚠️ ${bold(
+        "Payment reference format",
+      )}\n\n` +
+        `${code("/proof bank REFERENCE_NUMBER")}\n` +
+        `${code("/proof telebirr REFERENCE_NUMBER")}`,
+    );
+    return;
+  }
+
+  const entry = await findCustomerEntry(chatId);
+
+  if (!entry) {
+    await sendMessage(
+      chatId,
+      lang === "am"
+        ? `❌ ${bold("ንቁ ቦታ ማስያዝ አልተገኘም።")}\n\nበመጀመሪያ /numbers ወይም /pick ቁጥር ይላኩ።`
+        : lang === "om"
+          ? `❌ ${bold("Qabsiisa active ta'e hin argamne.")}\n\nJalqaba /numbers ykn /pick LAKKOOFSA ergaa.`
+          : `❌ ${bold("No active reservation found.")}\n\nUse /numbers or /pick NUMBER first.`,
+    );
+    return;
+  }
+
+  if (entry.status === "paid") {
+    await sendMessage(
+      chatId,
+      `ℹ️ ${bold(`Number #${entry.number} is already paid.`)}`,
+    );
+    return;
+  }
+
+  if (entry.status === "proof_submitted") {
+    await sendMessage(
+      chatId,
+      `⏳ ${bold(`Payment proof for number #${entry.number} has already been submitted.`)}\n\nPlease wait for admin verification.`,
+    );
+    return;
+  }
+
+  try {
+    await submitProof(entry.id, {
+      paymentMethod: parsed.paymentMethod,
+      paymentReference: parsed.paymentReference,
+      paymentProof: `Reference number submitted by ${chatId}`,
+    });
+  } catch (error) {
+    logger.error(
+      { err: error, entryId: entry.id },
+      "Failed to submit payment reference.",
+    );
+
+    await sendMessage(
+      chatId,
+      `❌ ${bold("Payment reference could not be submitted.")}\n\nPlease try again or send the receipt screenshot.`,
+    );
+    return;
+  }
+
+  for (const adminId of ADMIN_CHAT_IDS) {
+    try {
+      await sendMessage(
+        adminId,
+        `🧾 ${bold("NEW PAYMENT REFERENCE SUBMITTED")}\n\n` +
+          `Number: ${bold(`#${entry.number}`)}\n` +
+          `Customer: ${escapeHtml(entry.customerName)}\n` +
+          `Method: ${escapeHtml(parsed.paymentMethod.toUpperCase())}\n` +
+          `Reference: ${code(parsed.paymentReference)}\n\n` +
+          `Approve: ${code(`/approve ${entry.number}`)}\n` +
+          `Reject: ${code(`/reject ${entry.number}`)}`,
+      );
+    } catch (error) {
+      logger.error(
+        { err: error, adminId },
+        "Failed to forward payment reference to admin.",
+      );
+    }
+  }
+
+  await sendMessage(
+    chatId,
+    lang === "am"
+      ? `🧾 ${bold(`የክፍያ ማጣቀሻ ቁጥርዎ ለቁጥር #${entry.number} ደርሶናል።`)}\n\nአድሚኑ ክፍያውን ያረጋግጣል።`
+      : lang === "om"
+        ? `🧾 ${bold(`Lakkoofsi ragaa kaffaltii keessanii lakkoofsa #${entry.number}f nu ga'eera.`)}\n\nAdmin kaffaltii ni mirkaneessa.`
+        : `🧾 ${bold(`Payment reference received for number #${entry.number}.`)}\n\nAn admin will verify your payment shortly.`,
+  );
+}
+
+/* =========================================================
    PAYMENT SCREENSHOT
    ========================================================= */
 
@@ -2700,7 +2862,7 @@ async function handlePaymentPhoto(
       entry.id,
       {
         paymentMethod:
-          "telebirr",
+          paymentMethodFromText(message.caption),
 
         paymentReference:
           `Screenshot FileID: ${photo.file_id}`,
@@ -2766,6 +2928,7 @@ async function handlePaymentPhoto(
             `Number: #${entry.number}\n` +
             `Customer: ${entry.customerName}\n` +
             `Phone: ${entry.phone ?? "N/A"}\n` +
+            `Method: ${paymentMethodFromText(message.caption).toUpperCase()}\n` +
             `Chat ID: ${chatId}\n\n` +
             `Approve: /approve ${entry.number}\n` +
             `Reject: /reject ${entry.number}`,
@@ -2965,6 +3128,24 @@ async function handleMessage(
     await handlePaymentPhoto(
       message,
       chatId,
+      lang,
+    );
+
+    return;
+  }
+
+  /* =======================================================
+     PAYMENT REFERENCE
+     ======================================================= */
+
+  if (
+    command === "proof" ||
+    command === "reference" ||
+    command === "receipt"
+  ) {
+    await handlePaymentReference(
+      chatId,
+      text,
       lang,
     );
 

@@ -11,6 +11,7 @@ import {
   db,
   lotteryActivityTable,
   lotteryEntriesTable,
+  lotteryRoundsTable,
   lotterySettingsTable,
 } from "@workspace/db";
 
@@ -160,6 +161,48 @@ export async function ensureLotterySettings() {
     throw new Error(
       "Lottery settings could not be initialized.",
     );
+  }
+
+  return retried;
+}
+
+async function ensureActiveRound() {
+  const [existing] = await db
+    .select()
+    .from(lotteryRoundsTable)
+    .where(eq(lotteryRoundsTable.status, "active"))
+    .limit(1);
+
+  if (existing) {
+    return existing;
+  }
+
+  const [created] = await db
+    .insert(lotteryRoundsTable)
+    .values({
+      roundNumber: 1,
+      totalNumbers: TOTAL_NUMBERS,
+      pricePerNumber: PRICE_PER_NUMBER,
+      currency: CURRENCY,
+      status: "active",
+    })
+    .onConflictDoNothing({
+      target: lotteryRoundsTable.roundNumber,
+    })
+    .returning();
+
+  if (created) {
+    return created;
+  }
+
+  const [retried] = await db
+    .select()
+    .from(lotteryRoundsTable)
+    .where(eq(lotteryRoundsTable.status, "active"))
+    .limit(1);
+
+  if (!retried) {
+    throw new Error("Lottery round could not be initialized.");
   }
 
   return retried;
@@ -444,6 +487,7 @@ export async function reserveNumber(input: {
 
   const settings =
     await ensureLotterySettings();
+  const round = await ensureActiveRound();
 
   validateLotteryNumber(
     input.number,
@@ -483,6 +527,7 @@ export async function reserveNumber(input: {
   const [created] = await db
     .insert(lotteryEntriesTable)
     .values({
+      roundId: round.id,
       number: input.number,
       customerName,
       telegramUsername:
@@ -500,7 +545,10 @@ export async function reserveNumber(input: {
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: lotteryEntriesTable.number,
+      target: [
+        lotteryEntriesTable.roundId,
+        lotteryEntriesTable.number,
+      ],
 
       /**
        * The existing row can only be reused if
@@ -512,6 +560,7 @@ export async function reserveNumber(input: {
       ),
 
       set: {
+        roundId: round.id,
         customerName,
 
         telegramUsername:

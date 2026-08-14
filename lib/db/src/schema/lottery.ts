@@ -255,4 +255,3 @@ export type LotteryEntry = typeof lotteryEntriesTable.$inferSelect;
 export type LotteryActivity = typeof lotteryActivityTable.$inferSelect;
 export type LotterySettings = typeof lotterySettingsTable.$inferSelect;
 export type LotteryRound = typeof lotteryRoundsTable.$inferSelect;
-  language: text("language").notNull().default("am"),
