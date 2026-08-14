@@ -60,31 +60,34 @@ type TelegramMessage = {
   from?: TelegramUser;
 };
 
+type TelegramCallbackQuery = {
+  id: string;
+  data?: string;
+  message?: TelegramMessage;
+  from?: TelegramUser;
+};
+
 type TelegramUpdate = {
   update_id?: number;
   message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
 };
 
-type TelegramPaymentMethod = "bank" | "telebirr";
+type TelegramPaymentMethod =
+  | "bank"
+  | "telebirr";
 
 /* =========================================================
    LANGUAGE
    ========================================================= */
 
-type Language = "am" | "om" | "en";
+type Language =
+  | "am"
+  | "om"
+  | "en";
 
-/**
- * IMPORTANT:
- *
- * Your current lottery database schema does NOT contain
- * a "language" column.
- *
- * Therefore language is kept in memory for now.
- *
- * If you want language to survive a server restart,
- * add a language column or a separate users table later.
- */
-const userLanguages = new Map<string, Language>();
+const userLanguages =
+  new Map<string, Language>();
 
 const DEFAULT_LANGUAGE: Language = "am";
 
@@ -118,27 +121,9 @@ function isAdmin(
    USER STATE
    ========================================================= */
 
-/**
- * Stores the number a user selected while waiting
- * for them to provide their full name.
- *
- * Example:
- *
- * User: /pick 28
- * Bot: Send your full name
- *
- * Map:
- * chatId -> 28
- */
 const pendingSelections =
   new Map<string, number>();
 
-/**
- * Cache registered phone numbers.
- *
- * This is only a cache.
- * The database remains the source of truth.
- */
 const userPhones =
   new Map<string, string>();
 
@@ -163,9 +148,6 @@ function apiUrl(
   return `https://api.telegram.org/bot${token}/${method}`;
 }
 
-/**
- * Generic Telegram API request.
- */
 async function telegramRequest<T>(
   method: string,
   body: Record<string, unknown> = {},
@@ -174,12 +156,10 @@ async function telegramRequest<T>(
     apiUrl(method),
     {
       method: "POST",
-
       headers: {
         "content-type":
           "application/json",
       },
-
       body: JSON.stringify(body),
     },
   );
@@ -216,10 +196,6 @@ async function telegramRequest<T>(
    HTML HELPERS
    ========================================================= */
 
-/**
- * Telegram HTML parse mode requires special characters
- * to be escaped when inserting user-provided content.
- */
 function escapeHtml(
   value: unknown,
 ): string {
@@ -229,18 +205,12 @@ function escapeHtml(
     .replace(/>/g, "&gt;");
 }
 
-/**
- * Telegram HTML formatting helper.
- */
 function bold(
   value: unknown,
 ): string {
   return `<b>${escapeHtml(value)}</b>`;
 }
 
-/**
- * Telegram code formatting helper.
- */
 function code(
   value: unknown,
 ): string {
@@ -287,11 +257,6 @@ function getUserLanguage(
    PHONE HELPERS
    ========================================================= */
 
-/**
- * Check if user has previously registered a phone number.
- *
- * Database remains the source of truth.
- */
 async function getUserPhone(
   chatId: string,
 ): Promise<string | null> {
@@ -303,7 +268,9 @@ async function getUserPhone(
   }
 
   const cached =
-    userPhones.get(normalizedChatId);
+    userPhones.get(
+      normalizedChatId,
+    );
 
   if (cached) {
     return cached;
@@ -337,10 +304,6 @@ async function getUserPhone(
 
   return null;
 }
-
-/* =========================================================
-   REGISTERED CHAT IDS
-   ========================================================= */
 
 async function getAllRegisteredChatIds(): Promise<string[]> {
   const entries =
@@ -379,16 +342,6 @@ async function getAllRegisteredChatIds(): Promise<string[]> {
    COMMAND HELPERS
    ========================================================= */
 
-/**
- * Extract command from Telegram message.
- *
- * Supports:
- *
- * /start
- * /numbers
- * /approve 28
- * /approve@MyBot 28
- */
 function getCommand(
   text: string,
 ): string {
@@ -402,9 +355,6 @@ function getCommand(
     .split("@")[0];
 }
 
-/**
- * Get command arguments.
- */
 function getCommandArguments(
   text: string,
 ): string[] {
@@ -414,9 +364,6 @@ function getCommandArguments(
     .slice(1);
 }
 
-/**
- * Get text after a command.
- */
 function getCommandText(
   text: string,
 ): string {
@@ -432,9 +379,12 @@ function getCommandText(
 function paymentMethodFromText(
   value: string | undefined,
 ): TelegramPaymentMethod {
-  const normalized = (value ?? "").toLowerCase();
+  const normalized =
+    (value ?? "").toLowerCase();
 
-  return /\b(bank|cbe)\b/.test(normalized)
+  return /\b(bank|cbe)\b/.test(
+    normalized,
+  )
     ? "bank"
     : "telebirr";
 }
@@ -445,17 +395,25 @@ function parsePaymentReference(
   paymentMethod: TelegramPaymentMethod;
   paymentReference: string;
 } | null {
-  const args = getCommandArguments(text);
-  const methodToken = args.shift()?.toLowerCase();
+  const args =
+    getCommandArguments(text);
+
+  const methodToken =
+    args.shift()?.toLowerCase();
 
   if (
     !methodToken ||
-    !["bank", "cbe", "telebirr"].includes(methodToken)
+    ![
+      "bank",
+      "cbe",
+      "telebirr",
+    ].includes(methodToken)
   ) {
     return null;
   }
 
-  const paymentReference = args.join(" ").trim();
+  const paymentReference =
+    args.join(" ").trim();
 
   if (!paymentReference) {
     return null;
@@ -463,7 +421,8 @@ function parsePaymentReference(
 
   return {
     paymentMethod:
-      methodToken === "bank" || methodToken === "cbe"
+      methodToken === "bank" ||
+      methodToken === "cbe"
         ? "bank"
         : "telebirr",
     paymentReference,
@@ -475,10 +434,13 @@ function parsePaymentReference(
    ========================================================= */
 
 async function setupAdminCommandScopes() {
-  if (ADMIN_CHAT_IDS.length === 0) {
+  if (
+    ADMIN_CHAT_IDS.length === 0
+  ) {
     logger.warn(
       "No admin chat IDs configured.",
     );
+
     return;
   }
 
@@ -493,12 +455,12 @@ async function setupAdminCommandScopes() {
             {
               command: "admin",
               description:
-                "Open admin control panel",
+                "Open admin dashboard",
             },
             {
               command: "pending",
               description:
-                "View pending payment proofs",
+                "View pending payments",
             },
             {
               command: "proof",
@@ -508,12 +470,12 @@ async function setupAdminCommandScopes() {
             {
               command: "approve",
               description:
-                "Approve payment e.g. /approve 28",
+                "Approve payment",
             },
             {
               command: "reject",
               description:
-                "Reject payment e.g. /reject 28",
+                "Reject payment",
             },
             {
               command: "drawlotto",
@@ -528,7 +490,7 @@ async function setupAdminCommandScopes() {
             {
               command: "broadcast",
               description:
-                "Broadcast message to users",
+                "Broadcast message",
             },
             {
               command: "resetlotto",
@@ -541,7 +503,6 @@ async function setupAdminCommandScopes() {
                 "Look up user information",
             },
           ],
-
           scope: {
             type: "chat",
             chat_id: adminId,
@@ -580,14 +541,7 @@ async function sendMessage(
     unknown
   > = {
     chat_id: chatId,
-
     text,
-
-    /**
-     * HTML is safer than Markdown here because
-     * customer names, usernames and admin messages
-     * can contain _, *, [, ], etc.
-     */
     parse_mode: "HTML",
   };
 
@@ -606,9 +560,49 @@ async function sendMessage(
   );
 }
 
-/**
- * Send phone-sharing keyboard.
- */
+async function editMessageText(
+  chatId: string,
+  messageId: number,
+  text: string,
+  replyMarkup?:
+    | Record<string, unknown>,
+): Promise<void> {
+  const body: Record<
+    string,
+    unknown
+  > = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+  };
+
+  if (replyMarkup) {
+    body.reply_markup =
+      replyMarkup;
+  }
+
+  await telegramRequest(
+    "editMessageText",
+    body,
+  );
+}
+
+async function answerCallbackQuery(
+  callbackQueryId: string,
+  text?: string,
+): Promise<void> {
+  await telegramRequest(
+    "answerCallbackQuery",
+    {
+      callback_query_id:
+        callbackQueryId,
+      text,
+      show_alert: false,
+    },
+  );
+}
+
 async function requestPhoneShare(
   chatId: string,
   text: string,
@@ -623,9 +617,7 @@ async function requestPhoneShare(
         },
       ],
     ],
-
     resize_keyboard: true,
-
     one_time_keyboard: true,
   };
 
@@ -637,7 +629,320 @@ async function requestPhoneShare(
 }
 
 /* =========================================================
-   NUMBER RANGE DISPLAY
+   ADMIN DASHBOARD
+   ========================================================= */
+
+function adminDashboardKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "📊 Summary",
+          callback_data:
+            "admin_summary",
+        },
+        {
+          text: "⏳ Pending",
+          callback_data:
+            "admin_pending",
+        },
+      ],
+      [
+        {
+          text: "🎟 Numbers",
+          callback_data:
+            "admin_numbers",
+        },
+        {
+          text: "👥 Users",
+          callback_data:
+            "admin_users",
+        },
+      ],
+      [
+        {
+          text: "🎲 Draw Winner",
+          callback_data:
+            "admin_draw",
+        },
+      ],
+      [
+        {
+          text: "🔄 New Round",
+          callback_data:
+            "admin_newround",
+        },
+        {
+          text: "🧹 Reset",
+          callback_data:
+            "admin_reset",
+        },
+      ],
+      [
+        {
+          text: "📢 Broadcast",
+          callback_data:
+            "admin_broadcast",
+        },
+      ],
+      [
+        {
+          text: "🔄 Refresh",
+          callback_data:
+            "admin_dashboard",
+        },
+      ],
+    ],
+  };
+}
+
+async function showAdminDashboard(
+  chatId: string,
+  messageId?: number,
+): Promise<void> {
+  if (!isAdmin(chatId)) {
+    if (
+      messageId !== undefined
+    ) {
+      await sendMessage(
+        chatId,
+        `⛔ ${bold(
+          "Access Denied",
+        )}`,
+      );
+    }
+
+    return;
+  }
+
+  const summary =
+    await getSummary();
+
+  const text =
+    `🛠 ${bold(
+      "ADMIN DASHBOARD",
+    )}\n` +
+    `━━━━━━━━━━━━━━━━━━\n\n` +
+    `📊 ${bold(
+      "Lottery Status",
+    )}\n\n` +
+    `🎟 Total Numbers: ${code(
+      summary.totalNumbers,
+    )}\n` +
+    `🟢 Available: ${code(
+      summary.availableNumbers,
+    )}\n` +
+    `💰 Paid: ${code(
+      summary.paidNumbers,
+    )}\n` +
+    `⏳ Pending: ${code(
+      summary.proofPending,
+    )}\n` +
+    `🔒 Reserved: ${code(
+      summary.reservedNumbers,
+    )}\n` +
+    `💵 Revenue: ${code(
+      `${summary.totalCollected} ${summary.currency}`,
+    )}\n\n` +
+    `👇 ${bold(
+      "Select an action:",
+    )}`;
+
+  if (
+    messageId !== undefined
+  ) {
+    await editMessageText(
+      chatId,
+      messageId,
+      text,
+      adminDashboardKeyboard(),
+    );
+  } else {
+    await sendMessage(
+      chatId,
+      text,
+      adminDashboardKeyboard(),
+    );
+  }
+}
+
+/* =========================================================
+   ADMIN: SUMMARY
+   ========================================================= */
+
+async function showAdminSummary(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  const summary =
+    await getSummary();
+
+  const text =
+    `📊 ${bold(
+      "LOTTERY SUMMARY",
+    )}\n` +
+    `━━━━━━━━━━━━━━━━━━\n\n` +
+    `🎟 Total: ${code(
+      summary.totalNumbers,
+    )}\n` +
+    `🟢 Available: ${code(
+      summary.availableNumbers,
+    )}\n` +
+    `💰 Paid: ${code(
+      summary.paidNumbers,
+    )}\n` +
+    `⏳ Pending: ${code(
+      summary.proofPending,
+    )}\n` +
+    `🔒 Reserved: ${code(
+      summary.reservedNumbers,
+    )}\n` +
+    `💵 Revenue: ${code(
+      `${summary.totalCollected} ${summary.currency}`,
+    )}`;
+
+  await editMessageText(
+    chatId,
+    messageId,
+    text,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "🔄 Refresh",
+            callback_data:
+              "admin_summary",
+          },
+        ],
+        [
+          {
+            text: "⬅️ Dashboard",
+            callback_data:
+              "admin_dashboard",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+/* =========================================================
+   ADMIN: PENDING
+   ========================================================= */
+
+async function showAdminPending(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  const pendingEntries =
+    await db
+      .select()
+      .from(
+        lotteryEntriesTable,
+      )
+      .where(
+        eq(
+          lotteryEntriesTable.status,
+          "proof_submitted",
+        ),
+      );
+
+  if (
+    pendingEntries.length === 0
+  ) {
+    await editMessageText(
+      chatId,
+      messageId,
+      `⏳ ${bold(
+        "PENDING PAYMENTS",
+      )}\n\n` +
+        `✅ No pending payments.`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "🔄 Refresh",
+              callback_data:
+                "admin_pending",
+            },
+          ],
+          [
+            {
+              text: "⬅️ Dashboard",
+              callback_data:
+                "admin_dashboard",
+            },
+          ],
+        ],
+      },
+    );
+
+    return;
+  }
+
+  let text =
+    `⏳ ${bold(
+      `PENDING PAYMENTS (${pendingEntries.length})`,
+    )}\n` +
+    `━━━━━━━━━━━━━━━━━━\n\n`;
+
+  const buttons:
+    Record<string, unknown>[][] =
+    [];
+
+  for (
+    const entry of pendingEntries
+  ) {
+    text +=
+      `🎟 ${bold(
+        `#${entry.number}`,
+      )}\n` +
+      `👤 ${escapeHtml(
+        entry.customerName,
+      )}\n` +
+      `📱 ${escapeHtml(
+        entry.phone ?? "N/A",
+      )}\n` +
+      `💳 ${escapeHtml(
+        entry.paymentReference ??
+          "N/A",
+      )}\n\n`;
+
+    buttons.push([
+      {
+        text: `✅ Approve #${entry.number}`,
+        callback_data:
+          `admin_approve_${entry.number}`,
+      },
+      {
+        text: `❌ Reject #${entry.number}`,
+        callback_data:
+          `admin_reject_${entry.number}`,
+      },
+    ]);
+  }
+
+  buttons.push([
+    {
+      text: "⬅️ Dashboard",
+      callback_data:
+        "admin_dashboard",
+    },
+  ]);
+
+  await editMessageText(
+    chatId,
+    messageId,
+    text,
+    {
+      inline_keyboard:
+        buttons,
+    },
+  );
+}
+
+/* =========================================================
+   ADMIN: NUMBERS
    ========================================================= */
 
 function availableRanges(
@@ -693,6 +998,992 @@ function availableRanges(
   return ranges;
 }
 
+async function showAdminNumbers(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  const summary =
+    await getSummary();
+
+  const available =
+    await listNumbers(
+      "available",
+    );
+
+  const ranges =
+    availableRanges(
+      available.map(
+        (item) => item.number,
+      ),
+    );
+
+  const text =
+    `🎟 ${bold(
+      "LOTTERY NUMBERS",
+    )}\n` +
+    `━━━━━━━━━━━━━━━━━━\n\n` +
+    `🔢 Total: ${code(
+      summary.totalNumbers,
+    )}\n` +
+    `🟢 Available: ${code(
+      summary.availableNumbers,
+    )}\n` +
+    `💰 Paid: ${code(
+      summary.paidNumbers,
+    )}\n` +
+    `⏳ Pending: ${code(
+      summary.proofPending,
+    )}\n` +
+    `🔒 Reserved: ${code(
+      summary.reservedNumbers,
+    )}\n\n` +
+    `📋 ${bold(
+      "Available ranges:",
+    )}\n` +
+    `${escapeHtml(
+      ranges.join(", ") ||
+        "None",
+    )}`;
+
+  await editMessageText(
+    chatId,
+    messageId,
+    text,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "🔄 Refresh",
+            callback_data:
+              "admin_numbers",
+          },
+        ],
+        [
+          {
+            text: "⬅️ Dashboard",
+            callback_data:
+              "admin_dashboard",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+/* =========================================================
+   ADMIN: USERS
+   ========================================================= */
+
+async function showAdminUsers(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  const entries =
+    await db
+      .select({
+        chatId:
+          lotteryEntriesTable.telegramChatId,
+        phone:
+          lotteryEntriesTable.phone,
+        name:
+          lotteryEntriesTable.customerName,
+      })
+      .from(
+        lotteryEntriesTable,
+      );
+
+  const users = new Map<
+    string,
+    {
+      name: string;
+      phone: string;
+    }
+  >();
+
+  for (
+    const entry of entries
+  ) {
+    if (!entry.chatId) {
+      continue;
+    }
+
+    if (
+      !users.has(
+        String(entry.chatId),
+      )
+    ) {
+      users.set(
+        String(entry.chatId),
+        {
+          name:
+            entry.name,
+          phone:
+            entry.phone ??
+            "N/A",
+        },
+      );
+    }
+  }
+
+  const userList =
+    Array.from(
+      users.entries(),
+    );
+
+  let text =
+    `👥 ${bold(
+      "REGISTERED USERS",
+    )}\n` +
+    `━━━━━━━━━━━━━━━━━━\n\n` +
+    `Total users: ${code(
+      userList.length,
+    )}\n\n`;
+
+  const displayUsers =
+    userList.slice(0, 30);
+
+  for (
+    const [
+      userChatId,
+      user,
+    ] of displayUsers
+  ) {
+    text +=
+      `👤 ${escapeHtml(
+        user.name,
+      )}\n` +
+      `📱 ${escapeHtml(
+        user.phone,
+      )}\n` +
+      `🆔 ${code(
+        userChatId,
+      )}\n\n`;
+  }
+
+  if (
+    userList.length > 30
+  ) {
+    text +=
+      `Showing first 30 users.`;
+  }
+
+  await editMessageText(
+    chatId,
+    messageId,
+    text,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "🔄 Refresh",
+            callback_data:
+              "admin_users",
+          },
+        ],
+        [
+          {
+            text: "⬅️ Dashboard",
+            callback_data:
+              "admin_dashboard",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+/* =========================================================
+   ADMIN: APPROVE
+   ========================================================= */
+
+async function approveNumberFromDashboard(
+  chatId: string,
+  messageId: number,
+  number: number,
+): Promise<void> {
+  const [entry] =
+    await db
+      .select()
+      .from(
+        lotteryEntriesTable,
+      )
+      .where(
+        and(
+          eq(
+            lotteryEntriesTable.number,
+            number,
+          ),
+          eq(
+            lotteryEntriesTable.status,
+            "proof_submitted",
+          ),
+        ),
+      )
+      .limit(1);
+
+  if (!entry) {
+    await editMessageText(
+      chatId,
+      messageId,
+      `❌ ${bold(
+        `No pending payment found for #${number}.`,
+      )}`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "⬅️ Pending",
+              callback_data:
+                "admin_pending",
+            },
+          ],
+        ],
+      },
+    );
+
+    return;
+  }
+
+  try {
+    await approveEntry(
+      entry.id,
+    );
+
+    const userLang =
+      getUserLanguage(
+        entry.telegramChatId,
+      );
+
+    let customerMsg: string;
+
+    if (
+      userLang === "am"
+    ) {
+      customerMsg =
+        `🎉 ${bold(
+          "ክፍያዎ ጸድቋል!",
+        )}\n\n` +
+        `ቁጥር ${bold(
+          `#${entry.number}`,
+        )} ሙሉ በሙሉ የእርስዎ ሆኗል።\n\n` +
+        `መልካም እድል! 🍀`;
+    } else if (
+      userLang === "om"
+    ) {
+      customerMsg =
+        `🎉 ${bold(
+          "Kaffaltiin keessan mirkanaa'eera!",
+        )}\n\n` +
+        `Lakkoofsi ${bold(
+          `#${entry.number}`,
+        )} kan keessan ta'eera.\n\n` +
+        `Carraa gaarii! 🍀`;
+    } else {
+      customerMsg =
+        `🎉 ${bold(
+          "Payment Approved!",
+        )}\n\n` +
+        `Number ${bold(
+          `#${entry.number}`,
+        )} is officially yours.\n\n` +
+        `Good luck! 🍀`;
+    }
+
+    await sendMessage(
+      entry.telegramChatId,
+      customerMsg,
+    );
+
+    await editMessageText(
+      chatId,
+      messageId,
+      `✅ ${bold(
+        `Number #${number} approved successfully.`,
+      )}`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "⬅️ Pending",
+              callback_data:
+                "admin_pending",
+            },
+          ],
+          [
+            {
+              text: "🏠 Dashboard",
+              callback_data:
+                "admin_dashboard",
+            },
+          ],
+        ],
+      },
+    );
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        number,
+      },
+      "Dashboard approval failed.",
+    );
+
+    await editMessageText(
+      chatId,
+      messageId,
+      `❌ Failed to approve #${number}.`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "⬅️ Pending",
+              callback_data:
+                "admin_pending",
+            },
+          ],
+        ],
+      },
+    );
+  }
+}
+
+/* =========================================================
+   ADMIN: REJECT
+   ========================================================= */
+
+async function rejectNumberFromDashboard(
+  chatId: string,
+  messageId: number,
+  number: number,
+): Promise<void> {
+  const [entry] =
+    await db
+      .select()
+      .from(
+        lotteryEntriesTable,
+      )
+      .where(
+        and(
+          eq(
+            lotteryEntriesTable.number,
+            number,
+          ),
+          inArray(
+            lotteryEntriesTable.status,
+            [
+              "reserved",
+              "proof_submitted",
+            ],
+          ),
+        ),
+      )
+      .limit(1);
+
+  if (!entry) {
+    await editMessageText(
+      chatId,
+      messageId,
+      `❌ ${bold(
+        `No active entry found for #${number}.`,
+      )}`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "⬅️ Pending",
+              callback_data:
+                "admin_pending",
+            },
+          ],
+        ],
+      },
+    );
+
+    return;
+  }
+
+  try {
+    await rejectEntry(
+      entry.id,
+    );
+
+    const userLang =
+      getUserLanguage(
+        entry.telegramChatId,
+      );
+
+    let customerMsg: string;
+
+    if (
+      userLang === "am"
+    ) {
+      customerMsg =
+        `❌ ${bold(
+          "የክፍያ ደረሰኝዎ ውድቅ ተደርጓል!",
+        )}\n\n` +
+        `ቁጥር ${bold(
+          `#${entry.number}`,
+        )} ክፍት ተደርጓል።\n\n` +
+        `እባክዎ እንደገና ይሞክሩ።`;
+    } else if (
+      userLang === "om"
+    ) {
+      customerMsg =
+        `❌ ${bold(
+          "Kaffaltiin keessan kufaa ta'eera!",
+        )}\n\n` +
+        `Lakkoofsi ${bold(
+          `#${entry.number}`,
+        )} banaa ta'eera.\n\n` +
+        `Maaloo ammas yaalaa.`;
+    } else {
+      customerMsg =
+        `❌ ${bold(
+          "Payment rejected.",
+        )}\n\n` +
+        `Reservation for number ${bold(
+          `#${entry.number}`,
+        )} has been released.\n\n` +
+        `Please try again.`;
+    }
+
+    await sendMessage(
+      entry.telegramChatId,
+      customerMsg,
+    );
+
+    await editMessageText(
+      chatId,
+      messageId,
+      `🚫 ${bold(
+        `Number #${number} rejected and released.`,
+      )}`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "⬅️ Pending",
+              callback_data:
+                "admin_pending",
+            },
+          ],
+          [
+            {
+              text: "🏠 Dashboard",
+              callback_data:
+                "admin_dashboard",
+            },
+          ],
+        ],
+      },
+    );
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        number,
+      },
+      "Dashboard rejection failed.",
+    );
+
+    await editMessageText(
+      chatId,
+      messageId,
+      `❌ Failed to reject #${number}.`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "⬅️ Pending",
+              callback_data:
+                "admin_pending",
+            },
+          ],
+        ],
+      },
+    );
+  }
+}
+
+/* =========================================================
+   ADMIN: DRAW
+   ========================================================= */
+
+async function handleAdminDrawCallback(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  try {
+    const winner =
+      await executeDrawWinner();
+
+    await announceWinnerToAll(
+      winner,
+    );
+
+    await editMessageText(
+      chatId,
+      messageId,
+      `🎉 ${bold(
+        "DRAW COMPLETED",
+      )}\n\n` +
+        `🏆 Winning Number: ${code(
+          `#${winner.winnerNumber}`,
+        )}\n` +
+        `👤 Winner: ${bold(
+          winner.customerName,
+        )}\n\n` +
+        `📢 Winner announcement sent.`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "🏠 Dashboard",
+              callback_data:
+                "admin_dashboard",
+            },
+          ],
+        ],
+      },
+    );
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Unknown error.";
+
+    logger.error(
+      {
+        err: error,
+      },
+      "Lottery dashboard draw failed.",
+    );
+
+    await editMessageText(
+      chatId,
+      messageId,
+      `❌ ${bold(
+        "DRAW FAILED",
+      )}\n\n${escapeHtml(
+        errorMessage,
+      )}`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: "⬅️ Dashboard",
+              callback_data:
+                "admin_dashboard",
+            },
+          ],
+        ],
+      },
+    );
+  }
+}
+
+/* =========================================================
+   ADMIN: RESET
+   ========================================================= */
+
+async function showResetConfirmation(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  await editMessageText(
+    chatId,
+    messageId,
+    `⚠️ ${bold(
+      "RESET LOTTERY?",
+    )}\n\n` +
+      `This will permanently clear all current lottery entries.\n\n` +
+      `Are you sure?`,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "❌ Cancel",
+            callback_data:
+              "admin_dashboard",
+          },
+          {
+            text: "🗑 YES, RESET",
+            callback_data:
+              "admin_confirm_reset",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+async function confirmResetLottery(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  await db.delete(
+    lotteryEntriesTable,
+  );
+
+  pendingSelections.clear();
+
+  await editMessageText(
+    chatId,
+    messageId,
+    `✅ ${bold(
+      "LOTTERY RESET COMPLETE",
+    )}\n\n` +
+      `All current entries have been cleared.`,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "🏠 Admin Dashboard",
+            callback_data:
+              "admin_dashboard",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+/* =========================================================
+   ADMIN: NEW ROUND
+   ========================================================= */
+
+async function showNewRoundPanel(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  await editMessageText(
+    chatId,
+    messageId,
+    `🔄 ${bold(
+      "NEW LOTTERY ROUND",
+    )}\n\n` +
+      `The current system is ready for a new round.\n\n` +
+      `Choose an action below.`,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "📢 Announce New Round",
+            callback_data:
+              "admin_send_newround",
+          },
+        ],
+        [
+          {
+            text: "⬅️ Dashboard",
+            callback_data:
+              "admin_dashboard",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+async function sendNewRoundAnnouncement(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  const allChatIds =
+    await getAllRegisteredChatIds();
+
+  let count = 0;
+
+  for (
+    const targetChatId of allChatIds
+  ) {
+    try {
+      const lang =
+        getUserLanguage(
+          targetChatId,
+        );
+
+      let message: string;
+
+      if (
+        lang === "am"
+      ) {
+        message =
+          `🔔 ${bold(
+            "የአዲስ ዙር ማስታወቂያ",
+          )}\n\n` +
+          `🎉 ${bold(
+            "አዲስ የሎተሪ ዙር ተጀምሯል!",
+          )}\n\n` +
+          `አሁኑኑ ${bold(
+            "/numbers",
+          )} በመላክ እድልዎን ይሞክሩ።`;
+      } else if (
+        lang === "om"
+      ) {
+        message =
+          `🔔 ${bold(
+            "Beeksisa Marsaa Haaraa",
+          )}\n\n` +
+          `🎉 ${bold(
+            "Marsaan haaraan jalqabameera!",
+          )}\n\n` +
+          `Amma ${bold(
+            "/numbers",
+          )} erguun carraa keessan yaalaa.`;
+      } else {
+        message =
+          `🔔 ${bold(
+            "NEW ROUND NOTICE",
+          )}\n\n` +
+          `🎉 ${bold(
+            "A new lottery round has started!",
+          )}\n\n` +
+          `Send ${bold(
+            "/numbers",
+          )} now to choose your number.`;
+      }
+
+      await sendMessage(
+        targetChatId,
+        message,
+      );
+
+      count++;
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          chatId:
+            targetChatId,
+        },
+        "Failed to send new-round announcement.",
+      );
+    }
+  }
+
+  await editMessageText(
+    chatId,
+    messageId,
+    `✅ ${bold(
+      "NEW ROUND ANNOUNCED",
+    )}\n\n` +
+      `Notification delivered to ${code(
+        count,
+      )} users.`,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "🏠 Dashboard",
+            callback_data:
+              "admin_dashboard",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+/* =========================================================
+   ADMIN: BROADCAST PANEL
+   ========================================================= */
+
+async function showBroadcastPanel(
+  chatId: string,
+  messageId: number,
+): Promise<void> {
+  await editMessageText(
+    chatId,
+    messageId,
+    `📢 ${bold(
+      "BROADCAST",
+    )}\n\n` +
+      `To send a custom broadcast, use:\n\n` +
+      `${code(
+        "/broadcast Your message here",
+      )}\n\n` +
+      `The message will be sent to all registered users.`,
+    {
+      inline_keyboard: [
+        [
+          {
+            text: "⬅️ Dashboard",
+            callback_data:
+              "admin_dashboard",
+          },
+        ],
+      ],
+    },
+  );
+}
+
+/* =========================================================
+   ADMIN CALLBACK HANDLER
+   ========================================================= */
+
+async function handleAdminCallback(
+  callbackQuery: TelegramCallbackQuery,
+): Promise<void> {
+  const callbackId =
+    callbackQuery.id;
+
+  const data =
+    callbackQuery.data ?? "";
+
+  const chatId =
+    callbackQuery.message
+      ? String(
+          callbackQuery.message.chat.id,
+        )
+      : String(
+          callbackQuery.from?.id ??
+            "",
+        );
+
+  if (!isAdmin(chatId)) {
+    await answerCallbackQuery(
+      callbackId,
+      "⛔ Access denied.",
+    );
+
+    return;
+  }
+
+  await answerCallbackQuery(
+    callbackId,
+  );
+
+  const messageId =
+    callbackQuery.message
+      ?.message_id;
+
+  if (
+    messageId === undefined
+  ) {
+    return;
+  }
+
+  switch (data) {
+    case "admin_dashboard":
+      await showAdminDashboard(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_summary":
+      await showAdminSummary(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_pending":
+      await showAdminPending(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_numbers":
+      await showAdminNumbers(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_users":
+      await showAdminUsers(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_draw":
+      await handleAdminDrawCallback(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_reset":
+      await showResetConfirmation(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_confirm_reset":
+      await confirmResetLottery(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_newround":
+      await showNewRoundPanel(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_send_newround":
+      await sendNewRoundAnnouncement(
+        chatId,
+        messageId,
+      );
+      return;
+
+    case "admin_broadcast":
+      await showBroadcastPanel(
+        chatId,
+        messageId,
+      );
+      return;
+  }
+
+  const approveMatch =
+    data.match(
+      /^admin_approve_(\d+)$/,
+    );
+
+  if (approveMatch) {
+    const number =
+      Number(
+        approveMatch[1],
+      );
+
+    await approveNumberFromDashboard(
+      chatId,
+      messageId,
+      number,
+    );
+
+    return;
+  }
+
+  const rejectMatch =
+    data.match(
+      /^admin_reject_(\d+)$/,
+    );
+
+  if (rejectMatch) {
+    const number =
+      Number(
+        rejectMatch[1],
+      );
+
+    await rejectNumberFromDashboard(
+      chatId,
+      messageId,
+      number,
+    );
+
+    return;
+  }
+}
+
 /* =========================================================
    WINNER ANNOUNCEMENT
    ========================================================= */
@@ -704,17 +1995,14 @@ export async function announceWinnerToAll(
     participantChatIds: string[];
   },
 ): Promise<void> {
-  /**
-   * Use participantChatIds from draw when possible.
-   *
-   * If empty, fall back to database history.
-   */
   let allChatIds =
     winner.participantChatIds
       ?.filter(Boolean)
       .map(String) ?? [];
 
-  if (allChatIds.length === 0) {
+  if (
+    allChatIds.length === 0
+  ) {
     allChatIds =
       await getAllRegisteredChatIds();
   }
@@ -742,28 +2030,56 @@ export async function announceWinnerToAll(
 
     let announcementMsg: string;
 
-    if (lang === "am") {
+    if (
+      lang === "am"
+    ) {
       announcementMsg =
-        `🎉 ${bold("የሎተሪው ዕጣ ወጥቷል!")} 🎉\n\n` +
-        `🏆 ${bold("አሸናፊ ቁጥር:")} ${winnerNumber}\n` +
-        `👤 ${bold("የአሸናፊው ስም:")} ${winnerName}\n\n` +
-        `🔄 ${bold("አዲስ ዙር ተጀምሯል!")}\n` +
-        `የቀድሞው ዙር ቁጥሮች ተጠናቀዋል።\n\n` +
+        `🎉 ${bold(
+          "የሎተሪው ዕጣ ወጥቷል!",
+        )} 🎉\n\n` +
+        `🏆 ${bold(
+          "አሸናፊ ቁጥር:",
+        )} ${winnerNumber}\n` +
+        `👤 ${bold(
+          "የአሸናፊው ስም:",
+        )} ${winnerName}\n\n` +
+        `🔄 ${bold(
+          "አዲስ ዙር ተጀምሯል!",
+        )}\n` +
+        `የቀድሞው ዙር ተጠናቋል።\n\n` +
         `አሁኑኑ /numbers በመላክ አዲስ ቁጥር ይምረጡ።`;
-    } else if (lang === "om") {
+    } else if (
+      lang === "om"
+    ) {
       announcementMsg =
-        `🎉 ${bold("Lottoriin carraan ba'eera!")} 🎉\n\n` +
-        `🏆 ${bold("Lakkoofsa Mo'ataa:")} ${winnerNumber}\n` +
-        `👤 ${bold("Maqaa Mo'ataa:")} ${winnerName}\n\n` +
-        `🔄 ${bold("Marsaan haaraan jalqabameera!")}\n` +
-        `Lakkoofsotni marsaa darbee xumuramaniiru.\n\n` +
+        `🎉 ${bold(
+          "Lottoriin carraan ba'eera!",
+        )} 🎉\n\n` +
+        `🏆 ${bold(
+          "Lakkoofsa Mo'ataa:",
+        )} ${winnerNumber}\n` +
+        `👤 ${bold(
+          "Maqaa Mo'ataa:",
+        )} ${winnerName}\n\n` +
+        `🔄 ${bold(
+          "Marsaan haaraan jalqabameera!",
+        )}\n` +
+        `Marsaan darbe xumurameera.\n\n` +
         `Amma /numbers erguun lakkoofsa haaraa filadhaa.`;
     } else {
       announcementMsg =
-        `🎉 ${bold("LOTTERY DRAW COMPLETED!")} 🎉\n\n` +
-        `🏆 ${bold("Winning Number:")} ${winnerNumber}\n` +
-        `👤 ${bold("Winner Name:")} ${winnerName}\n\n` +
-        `🔄 ${bold("A new round has started!")}\n` +
+        `🎉 ${bold(
+          "LOTTERY DRAW COMPLETED!",
+        )} 🎉\n\n` +
+        `🏆 ${bold(
+          "Winning Number:",
+        )} ${winnerNumber}\n` +
+        `👤 ${bold(
+          "Winner Name:",
+        )} ${winnerName}\n\n` +
+        `🔄 ${bold(
+          "A new round has started!",
+        )}\n` +
         `The previous round has been completed.\n\n` +
         `Send /numbers to pick a new number.`;
     }
@@ -806,9 +2122,7 @@ function languageKeyboard() {
         },
       ],
     ],
-
     resize_keyboard: true,
-
     one_time_keyboard: true,
   };
 }
@@ -821,15 +2135,18 @@ async function handleLanguageSelection(
   chatId: string,
   text: string,
 ): Promise<boolean> {
-  let language: Language | null =
-    null;
+  let language:
+    | Language
+    | null = null;
 
   if (
     text.includes("አማርኛ")
   ) {
     language = "am";
   } else if (
-    text.includes("Afaan Oromoo") ||
+    text.includes(
+      "Afaan Oromoo",
+    ) ||
     text.includes("Oromoo")
   ) {
     language = "om";
@@ -855,13 +2172,17 @@ async function handleLanguageSelection(
     !savedPhone &&
     !isAdmin(chatId)
   ) {
-    if (language === "am") {
+    if (
+      language === "am"
+    ) {
       await requestPhoneShare(
         chatId,
-        `📍 ${bold("የግዴታ ደረጃ:")}\n\n` +
-          `ለመቀጠል እባክዎ ከታች ያለውን ${bold(
+        `📍 ${bold(
+          "የግዴታ ደረጃ:",
+        )}\n\n` +
+          `ለመቀጠል እባክዎ ${bold(
             "📱 ስልክ ቁጥር አጋራ",
-          )} ቁልፍ ይጫኑ።`,
+          )} የሚለውን ቁልፍ ይጫኑ።`,
         "📱 ስልክ ቁጥር አጋራ",
       );
     } else if (
@@ -869,7 +2190,9 @@ async function handleLanguageSelection(
     ) {
       await requestPhoneShare(
         chatId,
-        `📍 ${bold("Sadarkaa Dirqamaa:")}\n\n` +
+        `📍 ${bold(
+          "Sadarkaa Dirqamaa:",
+        )}\n\n` +
           `Itti fufuuf maaloo ${bold(
             "📱 Lakkoofsa Bilbilaa Qooda",
           )} jedhu tuqaa.`,
@@ -878,7 +2201,9 @@ async function handleLanguageSelection(
     } else {
       await requestPhoneShare(
         chatId,
-        `📍 ${bold("Mandatory Step:")}\n\n` +
+        `📍 ${bold(
+          "Mandatory Step:",
+        )}\n\n` +
           `Please tap ${bold(
             "📱 Share Phone Number",
           )} below to complete registration.`,
@@ -886,7 +2211,9 @@ async function handleLanguageSelection(
       );
     }
   } else {
-    if (language === "am") {
+    if (
+      language === "am"
+    ) {
       await sendMessage(
         chatId,
         `✅ ${bold(
@@ -925,7 +2252,7 @@ async function handleLanguageSelection(
 }
 
 /* =========================================================
-   START / LANGUAGE
+   START
    ========================================================= */
 
 async function handleStartCommand(
@@ -953,7 +2280,7 @@ async function handleStartCommand(
 }
 
 /* =========================================================
-   ADMIN: /ADMIN
+   ADMIN COMMAND
    ========================================================= */
 
 async function handleAdminCommand(
@@ -966,57 +2293,21 @@ async function handleAdminCommand(
         "Access Denied",
       )}\n\n` +
         `You are not an admin.\n` +
-        `Your Chat ID: ${code(chatId)}`,
+        `Your Chat ID: ${code(
+          chatId,
+        )}`,
     );
 
     return;
   }
 
-  const summary =
-    await getSummary();
-
-  const adminMsg =
-    `🛠 ${bold(
-      "ADMIN CONTROL PANEL",
-    )}\n` +
-    `─────────────\n\n` +
-    `📊 ${bold("Summary")}\n` +
-    `• Total Numbers: ${code(
-      summary.totalNumbers,
-    )}\n` +
-    `• Available: ${code(
-      summary.availableNumbers,
-    )}\n` +
-    `• Paid Entries: ${code(
-      summary.paidNumbers,
-    )}\n` +
-    `• Pending Approval: ${code(
-      summary.proofPending,
-    )}\n` +
-    `• Active Reserved: ${code(
-      summary.reservedNumbers,
-    )}\n` +
-    `• Total Revenue: ${code(
-      `${summary.totalCollected} ${summary.currency}`,
-    )}\n\n` +
-    `⚡ ${bold("Admin Commands")}\n` +
-    `• /pending - View pending payments\n` +
-    `• /approve <number> - Approve payment\n` +
-    `• /reject <number> - Reject payment\n` +
-    `• /drawlotto - Draw winner\n` +
-    `• /newround <message> - New round notice\n` +
-    `• /broadcast <message> - Broadcast\n` +
-    `• /resetlotto - Reset lottery\n` +
-    `• /user <chat_id> - User information`;
-
-  await sendMessage(
+  await showAdminDashboard(
     chatId,
-    adminMsg,
   );
 }
 
 /* =========================================================
-   ADMIN: /PENDING
+   ADMIN: PENDING COMMAND
    ========================================================= */
 
 async function handlePendingCommand(
@@ -1027,7 +2318,7 @@ async function handlePendingCommand(
       chatId,
       `⛔ ${bold(
         "Access Denied",
-      )}\n\nYou are not an admin.`,
+      )}`,
     );
 
     return;
@@ -1095,7 +2386,7 @@ async function handlePendingCommand(
 }
 
 /* =========================================================
-   ADMIN: /APPROVE
+   ADMIN: APPROVE COMMAND
    ========================================================= */
 
 async function handleApproveCommand(
@@ -1202,7 +2493,9 @@ async function handleApproveCommand(
 
   let customerMsg: string;
 
-  if (userLang === "am") {
+  if (
+    userLang === "am"
+  ) {
     customerMsg =
       `🎉 ${bold(
         "ክፍያዎ ጸድቋል!",
@@ -1251,7 +2544,7 @@ async function handleApproveCommand(
 }
 
 /* =========================================================
-   ADMIN: /REJECT
+   ADMIN: REJECT COMMAND
    ========================================================= */
 
 async function handleRejectCommand(
@@ -1361,7 +2654,9 @@ async function handleRejectCommand(
 
   let customerMsg: string;
 
-  if (userLang === "am") {
+  if (
+    userLang === "am"
+  ) {
     customerMsg =
       `❌ ${bold(
         "የክፍያ ደረሰኝዎ ውድቅ ተደርጓል!",
@@ -1410,7 +2705,7 @@ async function handleRejectCommand(
 }
 
 /* =========================================================
-   ADMIN: /DRAWLOTTO
+   ADMIN: DRAW COMMAND
    ========================================================= */
 
 async function handleDrawCommand(
@@ -1473,7 +2768,7 @@ async function handleDrawCommand(
 }
 
 /* =========================================================
-   ADMIN: /NEWROUND
+   ADMIN: NEW ROUND COMMAND
    ========================================================= */
 
 async function handleNewRoundCommand(
@@ -1494,13 +2789,6 @@ async function handleNewRoundCommand(
   const roundMsg =
     getCommandText(text);
 
-  const noticeContent =
-    roundMsg ||
-    `🚀 ${bold(
-      "አዲስ የሎተሪ ዙር ተጀምሯል!",
-    )}\n\n` +
-      `አሁኑኑ /numbers በማለት ዕድልዎን ይሞክሩ።`;
-
   const allChatIds =
     await getAllRegisteredChatIds();
 
@@ -1517,12 +2805,17 @@ async function handleNewRoundCommand(
 
       let message: string;
 
-      if (lang === "am") {
+      if (
+        lang === "am"
+      ) {
         message =
           `🔔 ${bold(
             "የአዲስ ዙር ማስታወቂያ",
           )}\n\n` +
-          `${noticeContent}\n\n` +
+          `${escapeHtml(
+            roundMsg ||
+              "አዲስ የሎተሪ ዙር ተጀምሯል!",
+          )}\n\n` +
           `👉 /numbers - ቁጥሮችን ይመልከቱ`;
       } else if (
         lang === "om"
@@ -1531,14 +2824,20 @@ async function handleNewRoundCommand(
           `🔔 ${bold(
             "Beeksisa Marsaa Haaraa",
           )}\n\n` +
-          `${noticeContent}\n\n` +
+          `${escapeHtml(
+            roundMsg ||
+              "Marsaan haaraan jalqabameera!",
+          )}\n\n` +
           `👉 /numbers - Lakkoofsota ilaalaa`;
       } else {
         message =
           `🔔 ${bold(
             "NEW ROUND NOTICE",
           )}\n\n` +
-          `${noticeContent}\n\n` +
+          `${escapeHtml(
+            roundMsg ||
+              "A new lottery round has started!",
+          )}\n\n` +
           `👉 /numbers - View available numbers`;
       }
 
@@ -1569,7 +2868,7 @@ async function handleNewRoundCommand(
 }
 
 /* =========================================================
-   ADMIN: /BROADCAST
+   ADMIN: BROADCAST COMMAND
    ========================================================= */
 
 async function handleBroadcastCommand(
@@ -1617,7 +2916,9 @@ async function handleBroadcastCommand(
 
       let prefix: string;
 
-      if (lang === "am") {
+      if (
+        lang === "am"
+      ) {
         prefix =
           `📢 ${bold(
             "ማስታወቂያ",
@@ -1665,7 +2966,7 @@ async function handleBroadcastCommand(
 }
 
 /* =========================================================
-   ADMIN: /RESETLOTTO
+   ADMIN: RESET COMMAND
    ========================================================= */
 
 async function handleResetLotteryCommand(
@@ -1682,17 +2983,6 @@ async function handleResetLotteryCommand(
     return;
   }
 
-  /**
-   * NOTE:
-   *
-   * This deliberately preserves your original
-   * reset behavior.
-   *
-   * It clears all current entries.
-   *
-   * Use this only when you intentionally want
-   * to wipe the current round.
-   */
   await db.delete(
     lotteryEntriesTable,
   );
@@ -1709,7 +2999,7 @@ async function handleResetLotteryCommand(
 }
 
 /* =========================================================
-   ADMIN: /USER
+   ADMIN: USER COMMAND
    ========================================================= */
 
 async function handleUserCommand(
@@ -1738,8 +3028,6 @@ async function handleUserCommand(
       chatId,
       `⚠️ Usage:\n${code(
         "/user <chat_id>",
-      )}\n\nExample:\n${code(
-        "/user 806241233",
       )}`,
     );
 
@@ -1813,7 +3101,9 @@ async function handleHelpCommand(
   chatId: string,
   lang: Language,
 ): Promise<void> {
-  if (lang === "am") {
+  if (
+    lang === "am"
+  ) {
     await sendMessage(
       chatId,
       `📖 ${bold(
@@ -1886,7 +3176,9 @@ async function handleNumbersCommand(
       ? ranges.join(", ")
       : null;
 
-  if (lang === "am") {
+  if (
+    lang === "am"
+  ) {
     await sendMessage(
       chatId,
       `🔢 ${bold(
@@ -1958,7 +3250,9 @@ async function handleStatusCommand(
   if (
     userEntries.length === 0
   ) {
-    if (lang === "am") {
+    if (
+      lang === "am"
+    ) {
       await sendMessage(
         chatId,
         `ℹ️ ${bold(
@@ -2004,7 +3298,9 @@ async function handleStatusCommand(
       )
       .join("\n");
 
-  if (lang === "am") {
+  if (
+    lang === "am"
+  ) {
     await sendMessage(
       chatId,
       `📋 ${bold(
@@ -2042,18 +3338,16 @@ async function handlePickCommand(
   text: string,
   lang: Language,
 ): Promise<boolean> {
-  /**
-   * Supports:
-   *
-   * /pick 42
-   * 42
-   */
   const command =
     getCommand(text);
 
-  let numberText: string | undefined;
+  let numberText:
+    | string
+    | undefined;
 
-  if (command === "pick") {
+  if (
+    command === "pick"
+  ) {
     numberText =
       getCommandArguments(
         text,
@@ -2094,7 +3388,9 @@ async function handlePickCommand(
       );
 
     if (!isAvailable) {
-      if (lang === "am") {
+      if (
+        lang === "am"
+      ) {
         await sendMessage(
           chatId,
           `❌ ቁጥር ${bold(
@@ -2127,15 +3423,17 @@ async function handlePickCommand(
       number,
     );
 
-    if (lang === "am") {
+    if (
+      lang === "am"
+    ) {
       await sendMessage(
         chatId,
-        `✅ Lakkoofsi ${bold(
+        `✅ ቁጥር ${bold(
           `#${number}`,
-        )} banaadha.\n\n` +
-          `Qabsiisuuf ${bold(
-            "maqaa guutuu keessan",
-          )} ergaa.`,
+        )} ክፍት ነው።\n\n` +
+          `${bold(
+            "ሙሉ ስምዎን",
+          )} ይላኩ።`,
       );
     } else if (
       lang === "om"
@@ -2212,10 +3510,6 @@ async function handlePendingName(
     return false;
   }
 
-  /**
-   * Prevent commands from accidentally becoming
-   * customer names.
-   */
   if (
     text.startsWith("/")
   ) {
@@ -2232,18 +3526,14 @@ async function handlePendingName(
       await reserveNumber({
         number:
           pendingNumber,
-
         customerName:
           text,
-
         telegramUsername:
           message.from
             ?.username ??
           null,
-
         telegramChatId:
           chatId,
-
         phone:
           savedPhone,
       });
@@ -2257,7 +3547,9 @@ async function handlePendingName(
         reserved.customerName,
       );
 
-    if (lang === "am") {
+    if (
+      lang === "am"
+    ) {
       await sendMessage(
         chatId,
         `✅ ${bold(
@@ -2379,16 +3671,6 @@ async function handlePendingName(
 
     return true;
   } catch (error) {
-    /**
-     * Very important:
-     *
-     * If another user successfully took the number
-     * between /pick and the name submission, reserveNumber()
-     * will reject it.
-     *
-     * We must clear the pending selection and tell the
-     * customer what happened.
-     */
     pendingSelections.delete(
       chatId,
     );
@@ -2412,7 +3694,9 @@ async function handlePendingName(
         "no longer available",
       )
     ) {
-      if (lang === "am") {
+      if (
+        lang === "am"
+      ) {
         await sendMessage(
           chatId,
           `❌ ይቅርታ። ቁጥር ${bold(
@@ -2468,15 +3752,6 @@ async function handleContact(
     return;
   }
 
-  /**
-   * Security check:
-   *
-   * Telegram contact sharing normally includes user_id.
-   * If it exists and doesn't match the sender, reject it.
-   *
-   * This prevents an admin/user from accidentally registering
-   * someone else's contact as their own.
-   */
   if (
     contact.user_id !==
       undefined &&
@@ -2529,11 +3804,13 @@ async function handleContact(
     );
   }
 
-  if (lang === "am") {
+  if (
+    lang === "am"
+  ) {
     await sendMessage(
       chatId,
       `✅ ${bold(
-        `ስልክ ቁጥርዎ በትክክል ተመዝግቧል።`,
+        "ስልክ ቁጥርዎ በትክክል ተመዝግቧል።",
       )}\n\n` +
         `📱 ${code(
           phoneNumber,
@@ -2584,9 +3861,6 @@ async function requirePhone(
   chatId: string,
   lang: Language,
 ): Promise<boolean> {
-  /**
-   * Admins don't need phone registration.
-   */
   if (isAdmin(chatId)) {
     return true;
   }
@@ -2598,7 +3872,9 @@ async function requirePhone(
     return true;
   }
 
-  if (lang === "am") {
+  if (
+    lang === "am"
+  ) {
     await requestPhoneShare(
       chatId,
       `⚠️ ${bold(
@@ -2647,7 +3923,10 @@ async function handlePaymentReference(
   text: string,
   lang: Language,
 ): Promise<void> {
-  const parsed = parsePaymentReference(text);
+  const parsed =
+    parsePaymentReference(
+      text,
+    );
 
   if (!parsed) {
     await sendMessage(
@@ -2655,76 +3934,134 @@ async function handlePaymentReference(
       `⚠️ ${bold(
         "Payment reference format",
       )}\n\n` +
-        `${code("/proof bank REFERENCE_NUMBER")}\n` +
-        `${code("/proof telebirr REFERENCE_NUMBER")}`,
+        `${code(
+          "/proof bank REFERENCE_NUMBER",
+        )}\n` +
+        `${code(
+          "/proof telebirr REFERENCE_NUMBER",
+        )}`,
     );
+
     return;
   }
 
-  const entry = await findCustomerEntry(chatId);
+  const entry =
+    await findCustomerEntry(
+      chatId,
+    );
 
   if (!entry) {
     await sendMessage(
       chatId,
       lang === "am"
-        ? `❌ ${bold("ንቁ ቦታ ማስያዝ አልተገኘም።")}\n\nበመጀመሪያ /numbers ወይም /pick ቁጥር ይላኩ።`
+        ? `❌ ${bold(
+            "ንቁ ቦታ ማስያዝ አልተገኘም።",
+          )}\n\nበመጀመሪያ /numbers ወይም /pick ቁጥር ይላኩ።`
         : lang === "om"
-          ? `❌ ${bold("Qabsiisa active ta'e hin argamne.")}\n\nJalqaba /numbers ykn /pick LAKKOOFSA ergaa.`
-          : `❌ ${bold("No active reservation found.")}\n\nUse /numbers or /pick NUMBER first.`,
+          ? `❌ ${bold(
+              "Qabsiisa active ta'e hin argamne.",
+            )}\n\nJalqaba /numbers ykn /pick LAKKOOFSA ergaa.`
+          : `❌ ${bold(
+              "No active reservation found.",
+            )}\n\nUse /numbers or /pick NUMBER first.`,
     );
+
     return;
   }
 
-  if (entry.status === "paid") {
+  if (
+    entry.status ===
+    "paid"
+  ) {
     await sendMessage(
       chatId,
-      `ℹ️ ${bold(`Number #${entry.number} is already paid.`)}`,
+      `ℹ️ ${bold(
+        `Number #${entry.number} is already paid.`,
+      )}`,
     );
+
     return;
   }
 
-  if (entry.status === "proof_submitted") {
+  if (
+    entry.status ===
+    "proof_submitted"
+  ) {
     await sendMessage(
       chatId,
-      `⏳ ${bold(`Payment proof for number #${entry.number} has already been submitted.`)}\n\nPlease wait for admin verification.`,
+      `⏳ ${bold(
+        `Payment proof for number #${entry.number} has already been submitted.`,
+      )}\n\nPlease wait for admin verification.`,
     );
+
     return;
   }
 
   try {
-    await submitProof(entry.id, {
-      paymentMethod: parsed.paymentMethod,
-      paymentReference: parsed.paymentReference,
-      paymentProof: `Reference number submitted by ${chatId}`,
-    });
+    await submitProof(
+      entry.id,
+      {
+        paymentMethod:
+          parsed.paymentMethod,
+        paymentReference:
+          parsed.paymentReference,
+        paymentProof:
+          `Reference number submitted by ${chatId}`,
+      },
+    );
   } catch (error) {
     logger.error(
-      { err: error, entryId: entry.id },
+      {
+        err: error,
+        entryId: entry.id,
+      },
       "Failed to submit payment reference.",
     );
 
     await sendMessage(
       chatId,
-      `❌ ${bold("Payment reference could not be submitted.")}\n\nPlease try again or send the receipt screenshot.`,
+      `❌ ${bold(
+        "Payment reference could not be submitted.",
+      )}\n\nPlease try again or send the receipt screenshot.`,
     );
+
     return;
   }
 
-  for (const adminId of ADMIN_CHAT_IDS) {
+  for (
+    const adminId of ADMIN_CHAT_IDS
+  ) {
     try {
       await sendMessage(
         adminId,
-        `🧾 ${bold("NEW PAYMENT REFERENCE SUBMITTED")}\n\n` +
-          `Number: ${bold(`#${entry.number}`)}\n` +
-          `Customer: ${escapeHtml(entry.customerName)}\n` +
-          `Method: ${escapeHtml(parsed.paymentMethod.toUpperCase())}\n` +
-          `Reference: ${code(parsed.paymentReference)}\n\n` +
-          `Approve: ${code(`/approve ${entry.number}`)}\n` +
-          `Reject: ${code(`/reject ${entry.number}`)}`,
+        `🧾 ${bold(
+          "NEW PAYMENT REFERENCE SUBMITTED",
+        )}\n\n` +
+          `Number: ${bold(
+            `#${entry.number}`,
+          )}\n` +
+          `Customer: ${escapeHtml(
+            entry.customerName,
+          )}\n` +
+          `Method: ${escapeHtml(
+            parsed.paymentMethod.toUpperCase(),
+          )}\n` +
+          `Reference: ${code(
+            parsed.paymentReference,
+          )}\n\n` +
+          `Approve: ${code(
+            `/approve ${entry.number}`,
+          )}\n` +
+          `Reject: ${code(
+            `/reject ${entry.number}`,
+          )}`,
       );
     } catch (error) {
       logger.error(
-        { err: error, adminId },
+        {
+          err: error,
+          adminId,
+        },
         "Failed to forward payment reference to admin.",
       );
     }
@@ -2733,10 +4070,16 @@ async function handlePaymentReference(
   await sendMessage(
     chatId,
     lang === "am"
-      ? `🧾 ${bold(`የክፍያ ማጣቀሻ ቁጥርዎ ለቁጥር #${entry.number} ደርሶናል።`)}\n\nአድሚኑ ክፍያውን ያረጋግጣል።`
+      ? `🧾 ${bold(
+          `የክፍያ ማጣቀሻ ቁጥርዎ ለቁጥር #${entry.number} ደርሶናል።`,
+        )}\n\nአድሚኑ ክፍያውን ያረጋግጣል።`
       : lang === "om"
-        ? `🧾 ${bold(`Lakkoofsi ragaa kaffaltii keessanii lakkoofsa #${entry.number}f nu ga'eera.`)}\n\nAdmin kaffaltii ni mirkaneessa.`
-        : `🧾 ${bold(`Payment reference received for number #${entry.number}.`)}\n\nAn admin will verify your payment shortly.`,
+        ? `🧾 ${bold(
+            `Lakkoofsi ragaa kaffaltii keessanii lakkoofsa #${entry.number}f nu ga'eera.`,
+          )}\n\nAdmin kaffaltii ni mirkaneessa.`
+        : `🧾 ${bold(
+            `Payment reference received for number #${entry.number}.`,
+          )}\n\nAn admin will verify your payment shortly.`,
   );
 }
 
@@ -2762,33 +4105,20 @@ async function handlePaymentPhoto(
     );
 
   if (!entry) {
-    if (lang === "am") {
-      await sendMessage(
-        chatId,
-        `❌ ${bold(
-          "ንቁ ቦታ ማስያዝ አልተገኘም።",
-        )}\n\n` +
-          `መጀመሪያ /numbers ወይም /pick ቁጥር ይላኩ።`,
-      );
-    } else if (
-      lang === "om"
-    ) {
-      await sendMessage(
-        chatId,
-        `❌ ${bold(
-          "Qabsiisa active ta'e hin argamne.",
-        )}\n\n` +
-          `Jalqaba /numbers ykn /pick LAKKOOFSA ergaa.`,
-      );
-    } else {
-      await sendMessage(
-        chatId,
-        `❌ ${bold(
-          "No active reservation found.",
-        )}\n\n` +
-          `Use /numbers or /pick NUMBER first.`,
-      );
-    }
+    await sendMessage(
+      chatId,
+      lang === "am"
+        ? `❌ ${bold(
+            "ንቁ ቦታ ማስያዝ አልተገኘም።",
+          )}\n\nመጀመሪያ /numbers ወይም /pick ቁጥር ይላኩ።`
+        : lang === "om"
+          ? `❌ ${bold(
+              "Qabsiisa active ta'e hin argamne.",
+            )}\n\nJalqaba /numbers ykn /pick LAKKOOFSA ergaa.`
+          : `❌ ${bold(
+              "No active reservation found.",
+            )}\n\nUse /numbers or /pick NUMBER first.`,
+    );
 
     return;
   }
@@ -2799,17 +4129,9 @@ async function handlePaymentPhoto(
   ) {
     await sendMessage(
       chatId,
-      lang === "am"
-        ? `ℹ️ ${bold(
-            `ቁጥር #${entry.number} ክፍያው ቀድሞ ተረጋግጧል።`,
-          )}`
-        : lang === "om"
-          ? `ℹ️ ${bold(
-              `Lakkoofsi #${entry.number} kaffaltiin isaa duraan mirkanaa'eera.`,
-            )}`
-          : `ℹ️ ${bold(
-              `Number #${entry.number} is already paid.`,
-            )}`,
+      `ℹ️ ${bold(
+        `Number #${entry.number} is already paid.`,
+      )}`,
     );
 
     return;
@@ -2821,26 +4143,14 @@ async function handlePaymentPhoto(
   ) {
     await sendMessage(
       chatId,
-      lang === "am"
-        ? `⏳ ${bold(
-            `የክፍያ ደረሰኝዎ ለቁጥር #${entry.number} ቀድሞ ተልኳል።`,
-          )}\n\nእባክዎ አድሚኑ እስኪያረጋግጥ ይጠብቁ።`
-        : lang === "om"
-          ? `⏳ ${bold(
-              `Nagaheen kaffaltii lakkoofsa #${entry.number} duraan ergameera.`,
-            )}\n\nAdmin hanga mirkaneessutti maaloo eeggadhaa.`
-          : `⏳ ${bold(
-              `Payment proof for number #${entry.number} has already been submitted.`,
-            )}\n\nPlease wait for admin verification.`,
+      `⏳ ${bold(
+        `Payment proof for number #${entry.number} has already been submitted.`,
+      )}\n\nPlease wait for admin verification.`,
     );
 
     return;
   }
 
-  /**
-   * Use the largest Telegram photo because it has
-   * the best available resolution.
-   */
   const photo =
     message.photo[
       message.photo.length - 1
@@ -2862,11 +4172,11 @@ async function handlePaymentPhoto(
       entry.id,
       {
         paymentMethod:
-          paymentMethodFromText(message.caption),
-
+          paymentMethodFromText(
+            message.caption,
+          ),
         paymentReference:
           `Screenshot FileID: ${photo.file_id}`,
-
         paymentProof:
           `Photo proof uploaded by ${chatId}`,
       },
@@ -2908,9 +4218,6 @@ async function handlePaymentPhoto(
     return;
   }
 
-  /**
-   * Notify all admins.
-   */
   for (
     const adminId of ADMIN_CHAT_IDS
   ) {
@@ -2918,22 +4225,23 @@ async function handlePaymentPhoto(
       await telegramRequest(
         "sendPhoto",
         {
-          chat_id: adminId,
-
+          chat_id:
+            adminId,
           photo:
             photo.file_id,
-
           caption:
             `📸 NEW PAYMENT SCREENSHOT SUBMITTED\n\n` +
             `Number: #${entry.number}\n` +
             `Customer: ${entry.customerName}\n` +
             `Phone: ${entry.phone ?? "N/A"}\n` +
-            `Method: ${paymentMethodFromText(message.caption).toUpperCase()}\n` +
+            `Method: ${paymentMethodFromText(
+              message.caption,
+            ).toUpperCase()}\n` +
             `Chat ID: ${chatId}\n\n` +
             `Approve: /approve ${entry.number}\n` +
             `Reject: /reject ${entry.number}`,
-
-          parse_mode: "HTML",
+          parse_mode:
+            "HTML",
         },
       );
     } catch (error) {
@@ -2947,7 +4255,9 @@ async function handlePaymentPhoto(
     }
   }
 
-  if (lang === "am") {
+  if (
+    lang === "am"
+  ) {
     await sendMessage(
       chatId,
       `📸 ${bold(
@@ -2990,7 +4300,7 @@ async function handleMessage(
     message.text?.trim() ??
     "";
 
-  let lang =
+  const lang =
     getUserLanguage(chatId);
 
   const command =
@@ -3090,7 +4400,7 @@ async function handleMessage(
   }
 
   /* =======================================================
-     START / LANGUAGE COMMAND
+     START / LANGUAGE
      ======================================================= */
 
   if (
@@ -3105,7 +4415,7 @@ async function handleMessage(
   }
 
   /* =======================================================
-     PHONE REGISTRATION GUARD
+     PHONE REGISTRATION
      ======================================================= */
 
   if (
@@ -3153,7 +4463,7 @@ async function handleMessage(
   }
 
   /* =======================================================
-     IGNORE EMPTY NON-TEXT MESSAGE
+     EMPTY MESSAGE
      ======================================================= */
 
   if (!text) {
@@ -3164,7 +4474,9 @@ async function handleMessage(
      CUSTOMER COMMANDS
      ======================================================= */
 
-  if (command === "help") {
+  if (
+    command === "help"
+  ) {
     await handleHelpCommand(
       chatId,
       lang,
@@ -3230,7 +4542,9 @@ async function handleMessage(
      FALLBACK
      ======================================================= */
 
-  if (lang === "am") {
+  if (
+    lang === "am"
+  ) {
     await sendMessage(
       chatId,
       `❓ ${bold(
@@ -3266,11 +4580,19 @@ async function handleMessage(
 export async function handleTelegramUpdate(
   update: TelegramUpdate,
 ): Promise<void> {
-  if (!update.message) {
-    return;
-  }
-
   try {
+    if (update.callback_query) {
+      await handleAdminCallback(
+        update.callback_query,
+      );
+
+      return;
+    }
+
+    if (!update.message) {
+      return;
+    }
+
     await handleMessage(
       update.message,
     );
@@ -3284,22 +4606,28 @@ export async function handleTelegramUpdate(
       "Telegram update failed.",
     );
 
-    /**
-     * Try to notify the user rather than silently
-     * failing.
-     */
     try {
       const chatId =
-        String(
-          update.message.chat.id,
-        );
+        update.message
+          ? String(
+              update.message.chat.id,
+            )
+          : update.callback_query
+              ?.message
+            ? String(
+                update.callback_query
+                  .message.chat.id,
+              )
+            : null;
 
-      await sendMessage(
-        chatId,
-        `⚠️ ${bold(
-          "Something went wrong.",
-        )}\n\nPlease try again.`,
-      );
+      if (chatId) {
+        await sendMessage(
+          chatId,
+          `⚠️ ${bold(
+            "Something went wrong.",
+          )}\n\nPlease try again.`,
+        );
+      }
     } catch {
       // Nothing else we can safely do here.
     }
@@ -3332,9 +4660,6 @@ async function poll(): Promise<void> {
     return;
   }
 
-  /**
-   * Cleanup expired reservations every minute.
-   */
   setInterval(() => {
     cleanupExpiredReservations()
       .catch((error) => {
@@ -3356,11 +4681,10 @@ async function poll(): Promise<void> {
           "getUpdates",
           {
             offset,
-
             timeout: 25,
-
             allowed_updates: [
               "message",
+              "callback_query",
             ],
           },
         )) ?? [];
@@ -3388,10 +4712,6 @@ async function poll(): Promise<void> {
         "Telegram polling failed.",
       );
 
-      /**
-       * Avoid hammering Telegram if there is
-       * a temporary network/API problem.
-       */
       await new Promise(
         (resolve) =>
           setTimeout(

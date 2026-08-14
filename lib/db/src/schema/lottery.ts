@@ -86,6 +86,7 @@ export const lotteryEntriesTable = pgTable(
      */
     roundId: integer("round_id")
       .notNull()
+      .default(1)
       .references(() => lotteryRoundsTable.id),
 
     number: integer("number").notNull(),
